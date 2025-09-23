@@ -60,8 +60,6 @@ st.markdown('<p class="sub-header">Advanced News Research & Analysis Platform</p
 st.sidebar.markdown('<h2 class="sidebar-header">📰 Article Sources</h2>', unsafe_allow_html=True)
 st.sidebar.markdown("Enter up to 3 news article URLs for comprehensive analysis")
 
-st.sidebar.markdown("Enter up to 3 news article URLs for comprehensive analysis")
-
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(
