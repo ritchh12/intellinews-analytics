@@ -1,4 +1,4 @@
-# 📊 IntelliNews Analytics
+# 📊 [IntelliNews Analytics (click to preview)](https://ritchh12-intellinews-analytics-news-research-tool-wvt4f9.streamlit.app/)
 
 > **Advanced News Research & Analysis Platform**
 
