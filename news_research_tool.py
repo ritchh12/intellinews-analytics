@@ -3,14 +3,11 @@ import streamlit as st
 import pickle
 import time
 from dotenv import load_dotenv
-from langchain.chains import RetrievalQA
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.llms import GPT4All
 from langchain_openai import ChatOpenAI
-import unstructured
 
 load_dotenv() 
 
@@ -146,47 +143,44 @@ if query:
         with st.spinner("🔍 Analyzing and generating response..."):
             with open(VECTOR_STORE_PATH, "rb") as f:
                 loaded_vector_store = pickle.load(f)
-                # retrieval_chain = RetrievalQAWithSourcesChain.from_llm(
-                #     llm=llm, 
-                #     retriever=loaded_vector_store.as_retriever()
-                # )
-                # analysis_result = retrieval_chain({"question": query}, return_only_outputs=True)
+                
+                # Get relevant documents
+                retriever = loaded_vector_store.as_retriever(search_kwargs={"k": 3})
+                relevant_docs = retriever.get_relevant_documents(query)
+                
+                # Combine context from retrieved documents
+                context = "\n\n".join([doc.page_content for doc in relevant_docs])
+                
+                # Create prompt for the LLM
+                prompt = f"""Based on the following context from news articles, please answer the question.
+                
+Context:
+{context}
 
-                retrieval_chain = RetrievalQA.from_chain_type(
-                 llm=llm,
-                retriever=loaded_vector_store.as_retriever(),
-                 return_source_documents=True
-                )
+Question: {query}
 
-                analysis_result = retrieval_chain.invoke({"query": query})
-
-                # Extract the main answer and sources
-                answer = analysis_result.get("result", "No answer generated.")
-                sources = analysis_result.get("source_documents", [])
-            
+Answer:"""
+                
+                # Get response from LLM
+                answer = llm.invoke(prompt).content
+                
             col1, col2 = st.columns([2, 1])
             
             with col1:
                 st.markdown("### 💡 Analysis Result")
                 st.markdown(f"**Question:** {query}")
-                # st.write(analysis_result["answer"])
                 st.write(answer)
-
             
             with col2:
-                sources = analysis_result.get("sources", "")
-                # if sources:
-                #     st.markdown("### 📚 Source References")
-                #     source_list = sources.split("\n")
-                #     for idx, source in enumerate(source_list, 1):
-                #         if source.strip():
-                #             st.markdown(f"**{idx}.** {source}")
-                # else:
-                #     st.info("No specific sources identified for this response.")
-                if sources:
+                if relevant_docs:
                     st.markdown("### 📚 Source References")
-                    for idx, src in enumerate(sources, 1):
-                        st.markdown(f"**{idx}.** {src.metadata.get('source', 'Unknown source')}")
+                    sources_set = set()
+                    for doc in relevant_docs:
+                        source = doc.metadata.get('source', 'Unknown source')
+                        sources_set.add(source)
+                    
+                    for idx, source in enumerate(sources_set, 1):
+                        st.markdown(f"**{idx}.** {source}")
                 else:
                     st.info("No specific sources identified for this response.")
 
