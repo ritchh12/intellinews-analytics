@@ -96,8 +96,6 @@ def initialize_llm():
 
 llm = initialize_llm()
 
-llm = initialize_llm()
-
 if process_url_clicked:
     valid_urls = [url for url in urls if url.strip()]
     
@@ -132,8 +130,6 @@ if process_url_clicked:
             with open(VECTOR_STORE_PATH, "wb") as f:
                 pickle.dump(vector_store, f)
             
-            st.success("🎉 Analysis complete! You can now ask questions about the articles.")
-
             st.success("🎉 Analysis complete! You can now ask questions about the articles.")
 
 st.markdown("---")
@@ -196,9 +192,6 @@ if query:
                     st.info("No specific sources identified for this response.")
 
     else:
-        st.warning("⚠️ Please process some articles first before asking questions.")
-        st.info("Use the sidebar to add article URLs and click 'Analyze Articles' to get started.")
-
         st.warning("⚠️ Please process some articles first before asking questions.")
         st.info("Use the sidebar to add article URLs and click 'Analyze Articles' to get started.")
 
