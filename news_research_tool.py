@@ -8,6 +8,9 @@ from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
+from audio_recorder_streamlit import audio_recorder
+import speech_recognition as sr
+import tempfile
 
 load_dotenv() 
 
@@ -90,6 +93,29 @@ def initialize_llm():
         model="llama-3.3-70b-versatile"
     )
 
+def transcribe_audio(audio_bytes):
+    """Transcribe audio bytes to text using speech recognition."""
+    recognizer = sr.Recognizer()
+    
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+            tmp_file.write(audio_bytes)
+            tmp_file_path = tmp_file.name
+        
+        with sr.AudioFile(tmp_file_path) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+            
+        os.unlink(tmp_file_path)
+        return text
+        
+    except sr.UnknownValueError:
+        return None
+    except sr.RequestError as e:
+        return None
+    except Exception as e:
+        return None
+
 llm = initialize_llm()
 
 if process_url_clicked:
@@ -132,11 +158,34 @@ st.markdown("---")
 st.markdown("### 🤔 Ask Your Questions")
 st.markdown("Enter your question about the analyzed articles and get instant insights.")
 
-query = st.text_input(
-    "💭 Your Question:", 
-    placeholder="What are the key insights from these articles?",
-    help="Ask any question about the content of the analyzed articles"
-)
+col_input, col_mic = st.columns([5, 1])
+
+with col_input:
+    query = st.text_input(
+        "💭 Your Question:", 
+        placeholder="What are the key insights from these articles?",
+        help="Ask any question about the content of the analyzed articles or use voice input",
+        key="text_query"
+    )
+
+with col_mic:
+    st.write("")
+    audio_bytes = audio_recorder(
+        text="🎤",
+        recording_color="#e74c3c",
+        neutral_color="#3498db",
+        icon_size="2x",
+        key="audio_recorder"
+    )
+
+if audio_bytes and not query:
+    with st.spinner("🎙️ Transcribing your voice..."):
+        transcribed_text = transcribe_audio(audio_bytes)
+        if transcribed_text:
+            st.success(f"✅ Transcribed: {transcribed_text}")
+            query = transcribed_text
+        else:
+            st.error("❌ Could not understand audio. Please try again or type your question.")
 
 if query:
     if os.path.exists(VECTOR_STORE_PATH):
@@ -146,7 +195,8 @@ if query:
                 
                 # Get relevant documents
                 retriever = loaded_vector_store.as_retriever(search_kwargs={"k": 3})
-                relevant_docs = retriever.get_relevant_documents(query)
+                # relevant_docs = retriever.get_relevant_documents(query)
+                relevant_docs = retriever.invoke(query)
                 
                 # Combine context from retrieved documents
                 context = "\n\n".join([doc.page_content for doc in relevant_docs])
@@ -201,13 +251,14 @@ st.sidebar.markdown("### ℹ️ How to Use")
 st.sidebar.markdown("""
 1. **Add URLs**: Enter up to 3 news article URLs
 2. **Analyze**: Click 'Analyze Articles' to process content
-3. **Ask**: Type your questions about the articles
+3. **Ask**: Type or speak your questions (click 🎤 for voice)
 4. **Get Insights**: Receive AI-powered analysis with sources
 """)
 
 st.sidebar.markdown("### 🔧 Features")
 st.sidebar.markdown("""
 - ✅ Multi-article analysis
+- ✅ Voice input support 🎤
 - ✅ Source attribution
 - ✅ Advanced AI processing
 - ✅ Real-time insights
