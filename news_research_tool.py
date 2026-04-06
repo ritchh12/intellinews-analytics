@@ -227,7 +227,7 @@ import streamlit as st
 import pickle
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import UnstructuredURLLoader
+from langchain_community.document_loaders import WebBaseLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
@@ -272,14 +272,22 @@ if process:
     else:
         try:
             with st.spinner("Loading articles..."):
-                loader = UnstructuredURLLoader(urls=valid_urls)
-                docs = loader.load()
+                all_docs = []
+                for url in valid_urls:
+                    try:
+                        loader = WebBaseLoader(url)
+                        docs = loader.load()
+                        all_docs.extend(docs)
+                    except Exception as url_error:
+                        st.warning(f"⚠️ Could not load {url}: {str(url_error)}")
+                        continue
                 
-                if not docs:
+                if not all_docs:
                     st.error("❌ No content could be extracted from the URLs. Please check the URLs are accessible and contain readable text.")
                     st.stop()
                 
-                st.info(f"✅ Loaded {len(docs)} document(s)")
+                st.info(f"✅ Loaded {len(all_docs)} document(s)")
+                docs = all_docs
 
             with st.spinner("Chunking text..."):
                 splitter = RecursiveCharacterTextSplitter(
