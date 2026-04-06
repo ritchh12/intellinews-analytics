@@ -228,7 +228,7 @@ import pickle
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI
 
@@ -270,34 +270,53 @@ if process:
     if not valid_urls:
         st.error("Please enter at least one URL")
     else:
-        with st.spinner("Loading articles..."):
-            loader = UnstructuredURLLoader(urls=valid_urls)
-            docs = loader.load()
+        try:
+            with st.spinner("Loading articles..."):
+                loader = UnstructuredURLLoader(urls=valid_urls)
+                docs = loader.load()
+                
+                if not docs:
+                    st.error("❌ No content could be extracted from the URLs. Please check the URLs are accessible and contain readable text.")
+                    st.stop()
+                
+                st.info(f"✅ Loaded {len(docs)} document(s)")
 
-        with st.spinner("Chunking text..."):
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200
-            )
-            chunks = splitter.split_documents(docs)
+            with st.spinner("Chunking text..."):
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000,
+                    chunk_overlap=200,
+                    separators=['\n\n', '\n', '.', ',']
+                )
+                chunks = splitter.split_documents(docs)
+                
+                if not chunks:
+                    st.error("❌ No text chunks could be created. The documents may be empty.")
+                    st.stop()
+                
+                st.info(f"✅ Created {len(chunks)} text chunks")
 
-        with st.spinner("Creating embeddings..."):
-            embeddings = HuggingFaceEmbeddings(
-                model_name="all-MiniLM-L6-v2"
-            )
+            with st.spinner("Creating embeddings..."):
+                embeddings = HuggingFaceEmbeddings(
+                    model_name="all-MiniLM-L6-v2"
+                )
 
-            # 🔥 PERSISTENT MEMORY FIX
-            if os.path.exists(VECTOR_STORE_PATH):
-                with open(VECTOR_STORE_PATH, "rb") as f:
-                    vector_store = pickle.load(f)
-                vector_store.add_documents(chunks)
-            else:
-                vector_store = FAISS.from_documents(chunks, embeddings)
+                if os.path.exists(VECTOR_STORE_PATH):
+                    with open(VECTOR_STORE_PATH, "rb") as f:
+                        vector_store = pickle.load(f)
+                    vector_store.add_documents(chunks)
+                    st.info("✅ Added new documents to existing vector store")
+                else:
+                    vector_store = FAISS.from_documents(chunks, embeddings)
+                    st.info("✅ Created new vector store with embeddings")
 
-            with open(VECTOR_STORE_PATH, "wb") as f:
-                pickle.dump(vector_store, f)
+                with open(VECTOR_STORE_PATH, "wb") as f:
+                    pickle.dump(vector_store, f)
 
-        st.success("Articles processed and stored!")
+            st.success("🎉 Articles processed and stored successfully!")
+            
+        except Exception as e:
+            st.error(f"❌ Error processing articles: {str(e)}")
+            st.info("Please try again with different URLs or check that the URLs are accessible.")
 
 # -------------------- QUERY --------------------
 query = st.text_input("Ask a question about the news")
@@ -371,39 +390,52 @@ if query:
     if not os.path.exists(VECTOR_STORE_PATH):
         st.warning("Please analyze articles first")
     else:
-        with open(VECTOR_STORE_PATH, "rb") as f:
-            vector_store = pickle.load(f)
+        try:
+            with open(VECTOR_STORE_PATH, "rb") as f:
+                vector_store = pickle.load(f)
 
-        retriever = vector_store.as_retriever(search_kwargs={"k": 4})
-        docs = retriever.invoke(query)
+            retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+            docs = retriever.invoke(query)
 
-        context = "\n\n".join([d.page_content for d in docs])
+            if not docs:
+                st.warning("No relevant documents found for your query.")
+                st.stop()
 
-        with st.spinner("Analyzing..."):
+            context = "\n\n".join([d.page_content for d in docs])
 
-            answer = generate_answer(context, query)
-            bias = analyze_bias(context)
-            emotion = analyze_emotion(context)
-            narrative = narrative_evolution(docs)
+            with st.spinner("Analyzing..."):
+                answer = generate_answer(context, query)
+                bias = analyze_bias(context)
+                emotion = analyze_emotion(context)
+                narrative = narrative_evolution(docs)
 
-        # -------------------- OUTPUT --------------------
+            col1, col2 = st.columns(2)
 
-        col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("💡 Answer")
+                st.write(answer)
 
-        with col1:
-            st.subheader("💡 Answer")
-            st.write(answer)
+                st.subheader("⚖️ Bias Analysis")
+                st.write(bias)
 
-            st.subheader("⚖️ Bias Analysis")
-            st.write(bias)
+                st.subheader("🎭 Emotion Analysis")
+                st.write(emotion)
 
-            st.subheader("🎭 Emotion Analysis")
-            st.write(emotion)
+            with col2:
+                st.subheader("🔄 Narrative Evolution")
+                st.write(narrative)
 
-        with col2:
-            st.subheader("🔄 Narrative Evolution")
-            st.write(narrative)
+                st.subheader("📚 Sources")
+                if docs:
+                    sources_set = set()
+                    for d in docs:
+                        source = d.metadata.get("source", "Unknown source")
+                        sources_set.add(source)
+                    for idx, source in enumerate(sources_set, 1):
+                        st.markdown(f"**{idx}.** {source}")
+                else:
+                    st.info("No sources found")
 
-            st.subheader("📚 Sources")
-            for d in docs:
-                st.write(d.metadata.get("source", "Unknown"))
+        except Exception as e:
+            st.error(f"❌ Error processing query: {str(e)}")
+            st.info("Please try rephrasing your question or reanalyzing the articles.")
